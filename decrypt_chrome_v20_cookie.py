@@ -21,11 +21,14 @@ from pypsexec.client import Client
 from Crypto.Cipher import AES, ChaCha20_Poly1305
 import sqlite3
 import pathlib
+from datetime import datetime, timedelta
+import time
 
 user_profile = os.environ['USERPROFILE']
 local_state_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Local State"
 # cookie_db_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"
-cookie_db_path = rf"C:\Users\songz\AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"
+# cookie_db_path = rf"C:\Users\songz\AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"
+cookie_db_path = rf"C:\Users\songz\Desktop\chrome_v20_decryption\Cookies"
 with open(local_state_path, "r", encoding="utf-8") as f:
     local_state = json.load(f)
 
@@ -92,7 +95,7 @@ print(binascii.b2a_base64(key))
 # fetch all v20 cookies
 con = sqlite3.connect(pathlib.Path(cookie_db_path).as_uri() + "?mode=ro", uri=True)
 cur = con.cursor()
-r = cur.execute("SELECT host_key, name, CAST(encrypted_value AS BLOB) from cookies;")
+r = cur.execute("SELECT host_key, name, CAST(encrypted_value AS BLOB), path, is_secure, is_httponly, expires_utc from cookies WHERE host_key LIKE '%douyin%';")
 cookies = cur.fetchall()
 cookies_v20 = [c for c in cookies if c[2][:3] == b"v20"]
 con.close()
@@ -108,7 +111,40 @@ def decrypt_cookie_v20(encrypted_value):
     decrypted_cookie = cookie_cipher.decrypt_and_verify(encrypted_cookie, cookie_tag)
     return decrypted_cookie[32:].decode('utf-8')
 
+def convert_chrome_time(chrome_time):
+    if chrome_time == 0:
+        return None
+    # Chrome time starts from 1601-01-01, Unix time starts from 1970-01-01
+    # The difference in seconds between these dates
+    chrome_epoch = datetime(1601, 1, 1)
+    unix_epoch = datetime(1970, 1, 1)
+    delta = chrome_epoch - unix_epoch
+    # Convert chrome time (100-nanosecond intervals) to seconds
+    unix_time = (chrome_time / 10000000) - delta.total_seconds()
+    return unix_time
+
+cookie_list = []
 for c in cookies_v20:
-    print(c[0], c[1], decrypt_cookie_v20(c[2]))
+    host_key, name, encrypted_value, path, is_secure, is_httponly, expires_utc = c
+    cookie_dict = {
+        "name": name,
+        "value": decrypt_cookie_v20(encrypted_value),
+        "domain": host_key,
+        "hostOnly": True,
+        "path": path,
+        "secure": bool(is_secure),
+        "httpOnly": bool(is_httponly),
+        "session": expires_utc == 0,
+        "sameSite": "unspecified",
+        "expirationDate": convert_chrome_time(expires_utc)
+    }
+    cookie_list.append(cookie_dict)
+
+# 将结果写入JSON文件
+timestamp = time.strftime("%Y%m%d_%H%M%S")
+output_file = f"douyin_cookies_{timestamp}.json"
+with open(output_file, 'w', encoding='utf-8') as f:
+    json.dump(cookie_list, f, indent=2, ensure_ascii=False)
+print(f"Cookies have been saved to {output_file}")
 
 input()
