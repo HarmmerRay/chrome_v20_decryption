@@ -24,8 +24,8 @@ import pathlib
 
 user_profile = os.environ['USERPROFILE']
 local_state_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Local State"
-cookie_db_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"
-
+# cookie_db_path = rf"{user_profile}\AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"
+cookie_db_path = rf"C:\Users\songz\AppData\Local\Google\Chrome\User Data\Default\Network\Cookies"
 with open(local_state_path, "r", encoding="utf-8") as f:
     local_state = json.load(f)
 
